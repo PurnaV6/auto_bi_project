@@ -1,21 +1,128 @@
-# app.py
-# MIT Licensed © 2025 Purna Vemula (github.com/PurnaV6/auto_bi_project)
+# app.py (colorful)
 import json
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-st.set_page_config(page_title="Auto-BI Basic", layout="wide")
-st.title("Auto-BI Basic — Upload • Clean • Recommend • Build")
+# -------------------- THEME SETTINGS (live controls) --------------------
+st.set_page_config(page_title="Auto-BI • Color Edition", layout="wide", page_icon="🎨")
 
-# ---------- Helpers ----------
+# Sidebar Theme Controls
+with st.sidebar:
+    st.header("🎨 Theme")
+    mode = st.radio("Mode", ["Light", "Dark"], horizontal=True, index=0)
+    primary = st.color_picker("Primary color", value="#5E60CE")
+    accent = st.color_picker("Accent color", value="#4EA8DE")
+
+    st.markdown("---")
+    st.header("📊 Charts")
+    # A few nice Plotly palettes
+    palette_name = st.selectbox(
+        "Palette",
+        [
+            "Plotly", "D3", "G10", "T10",
+            "Pastel", "Set2", "Bold", "Antique"
+        ],
+        index=0
+    )
+    palette_map = {
+        "Plotly": px.colors.qualitative.Plotly,
+        "D3": px.colors.qualitative.D3,
+        "G10": px.colors.qualitative.G10,
+        "T10": px.colors.qualitative.T10,
+        "Pastel": px.colors.qualitative.Pastel,
+        "Set2": px.colors.qualitative.Set2,
+        "Bold": px.colors.qualitative.Bold,
+        "Antique": px.colors.qualitative.Antique
+    }
+    COLOR_SEQ = palette_map[palette_name]
+
+# -------------------- GLOBAL STYLE (CSS) --------------------
+# light / dark backgrounds
+bg_light = "#0b1021"  # header gradient start (used as overlay)
+bg_dark = "#0b1021"
+text_light = "#0b1021"
+text_dark = "#E6E6E6"
+
+is_dark = (mode == "Dark")
+body_text = text_dark if is_dark else text_light
+panel_bg = "#111827" if is_dark else "#FFFFFF"
+card_bg = "#0f172a" if is_dark else "#ffffff"
+card_border = "#233044" if is_dark else "#e5e7eb"
+
+custom_css = f"""
+<style>
+/* Page background */
+.stApp {{
+  background: linear-gradient(135deg, {primary}22 0%, {accent}11 100%);
+}}
+
+header[data-testid="stHeader"] {{
+  background: linear-gradient(90deg, {primary} 0%, {accent} 100%);
+  padding-bottom: 0.25rem;
+  box-shadow: 0 2px 10px #00000033;
+}}
+header [data-testid="stHeader"] * {{
+  color: white !important;
+}}
+
+h1, h2, h3, h4, h5 {{
+  color: {"#ffffff" if is_dark else "#111827"} !important;
+}}
+
+.section-card {{
+  background: {card_bg};
+  border: 1px solid {card_border};
+  border-radius: 16px;
+  padding: 18px 18px 8px 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  margin-bottom: 16px;
+}}
+
+.small-badge {{
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: {primary}22;
+  color: {primary};
+  border: 1px solid {primary}55;
+  font-size: 0.8rem;
+  margin-left: 6px;
+}}
+
+.stButton>button {{
+  background: {primary};
+  color: white;
+  border: 0;
+  border-radius: 12px;
+  padding: 0.5rem 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 6px 14px {primary}33;
+}}
+.stButton>button:hover {{
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px {primary}55;
+}}
+
+.block-title {{
+  display:flex; align-items:center; gap:.5rem;
+}}
+.block-title:before {{
+  content:"";
+  width:10px; height:10px; border-radius:3px;
+  background:{accent};
+  display:inline-block;
+}}
+</style>
+"""
+st.markdown(custom_css, unsafe_allow_html=True)
+
+# -------------------- HELPERS --------------------
 def guess_role(s: pd.Series):
-    """Infer simple roles: dimension vs measure."""
     if pd.api.types.is_datetime64_any_dtype(s) or pd.api.types.is_bool_dtype(s):
         return "dimension"
     if pd.api.types.is_numeric_dtype(s):
         return "measure" if s.nunique(dropna=True) > 15 else "dimension"
-    # heuristic: low-unique text → dimension
     return "dimension" if s.nunique(dropna=True) <= max(50, len(s)//20) else "measure"
 
 def infer_schema(df: pd.DataFrame):
@@ -32,98 +139,94 @@ def infer_schema(df: pd.DataFrame):
     }
 
 def clean_dataframe(df: pd.DataFrame):
-    """Trim strings, coerce types, drop dupes, basic imputes."""
     X = df.copy()
-
-    # trim strings
     for c in X.select_dtypes(include=["object", "string"]).columns:
         X[c] = X[c].astype(str).str.strip()
-
-    # try numeric/datetime conversion for object cols
     for c in X.columns:
         if X[c].dtype == "object":
             try:
-                X[c] = pd.to_numeric(X[c])
-                continue
+                X[c] = pd.to_numeric(X[c]); continue
             except Exception:
                 pass
             try:
                 X[c] = pd.to_datetime(X[c], errors="raise", infer_datetime_format=True)
             except Exception:
                 pass
-
-    # drop duplicates
     before = len(X)
     X = X.drop_duplicates()
     dropped = before - len(X)
-
-    # simple imputations
     for c in X.select_dtypes(include=["float", "int", "Int64", "Float64"]).columns:
         X[c] = X[c].fillna(X[c].median())
     for c in X.select_dtypes(include=["object", "string", "category"]).columns:
         X[c] = X[c].fillna("Missing")
-
     report = {"actions": [f"drop_duplicates: {dropped} removed",
                           "trim_strings", "fix_types", "simple_impute"]}
     return X, report
 
 def build_chart(df: pd.DataFrame, spec: dict):
-    """Render a chart from a spec: type, x, y, color, agg, (optional) z."""
-    t = spec["type"]
-    x = spec.get("x")
-    y = spec.get("y")
-    color = spec.get("color")
-    agg = spec.get("agg", "sum")
+    t = spec["type"]; x = spec.get("x"); y = spec.get("y")
+    color = spec.get("color"); agg = spec.get("agg", "sum")
     title = spec.get("title", "")
+
+    common_kwargs = {"color_discrete_sequence": COLOR_SEQ}
+    if color:
+        common_kwargs["color"] = color
 
     if t in ("bar", "line"):
         if y and pd.api.types.is_numeric_dtype(df[y]):
             d = getattr(df.groupby(x)[y], agg)().reset_index()
-            fig = px.bar(d, x=x, y=y, color=color) if t == "bar" else px.line(d, x=x, y=y, color=color)
+            fig = px.bar(d, x=x, y=y, **common_kwargs) if t == "bar" else px.line(d, x=x, y=y, **common_kwargs)
         else:
             d = df.groupby(x).size().reset_index(name="count")
-            fig = px.bar(d, x=x, y="count", color=color) if t == "bar" else px.line(d, x=x, y="count", color=color)
-
+            fig = px.bar(d, x=x, y="count", **common_kwargs) if t == "bar" else px.line(d, x=x, y="count", **common_kwargs)
     elif t == "histogram":
-        fig = px.histogram(df, x=x, color=color)
-
+        fig = px.histogram(df, x=x, **common_kwargs)
     elif t == "scatter":
-        fig = px.scatter(df, x=x, y=y, color=color)
-
+        fig = px.scatter(df, x=x, y=y, **common_kwargs)
     elif t == "box":
         target = y or x
-        fig = px.box(df, y=target, color=color)
-
+        fig = px.box(df, y=target, **common_kwargs)
     elif t == "heatmap":
-        # needs x (dim), y (dim), z (measure)
         z = spec.get("z")
         if not z:
-            if y and pd.api.types.is_numeric_dtype(df[y]):
-                z = y
+            if y and pd.api.types.is_numeric_dtype(df[y]): z = y
             else:
                 nums = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
                 z = nums[0] if nums else None
         if z is None:
             cols = df.columns.tolist()
-            fig = px.scatter(df, x=cols[0], y=cols[1] if len(cols) > 1 else None)
+            fig = px.scatter(df, x=cols[0], y=cols[1] if len(cols) > 1 else None, **common_kwargs)
         else:
             d = getattr(df.groupby([x, y])[z], agg)().reset_index()
-            fig = px.density_heatmap(d, x=x, y=y, z=z, histfunc="avg")
+            fig = px.density_heatmap(d, x=x, y=y, z=z, histfunc="avg", color_continuous_scale="Bluered")
     else:
         cols = df.columns.tolist()
-        fig = px.scatter(df, x=cols[0], y=cols[1] if len(cols) > 1 else None)
+        fig = px.scatter(df, x=cols[0], y=cols[1] if len(cols) > 1 else None, **common_kwargs)
 
-    fig.update_layout(title=title)
+    fig.update_layout(
+        title=title,
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0.02)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        font=dict(size=13),
+    )
     return fig
 
-# ---------- UI ----------
+# -------------------- UI --------------------
+st.markdown(f"<h1 class='block-title'>Auto-BI <span class='small-badge'>{palette_name} palette</span></h1>", unsafe_allow_html=True)
+st.caption("Upload → Clean → Recommend → Build • Now with themes & palettes")
+
 uploaded = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx", "xls", "parquet"])
 
 if not uploaded:
-    st.info("Upload a dataset to get started. CSV is recommended for the first run.")
+    with st.container():
+        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+        st.info("Upload a dataset to get started. CSV is recommended for the first run.")
+        st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# Read uploaded file
+# read file
 try:
     name = uploaded.name.lower()
     if name.endswith(".csv"):
@@ -137,27 +240,34 @@ except Exception as e:
     st.stop()
 
 # 1) Preview
+st.markdown("<div class='section-card'>", unsafe_allow_html=True)
 st.subheader("1) Preview")
-st.dataframe(df.head())
+st.dataframe(df.head(), use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 2) Schema
+st.markdown("<div class='section-card'>", unsafe_allow_html=True)
 st.subheader("2) Schema & quick stats")
 schema = infer_schema(df)
 st.json(schema)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 3) Cleaning
+st.markdown("<div class='section-card'>", unsafe_allow_html=True)
 st.subheader("3) Auto-clean")
 df_clean, report = clean_dataframe(df)
 st.success(f"Cleaned rows: {len(df_clean)} (from {len(df)})")
 with st.expander("Cleaning report"):
     st.json(report)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 4) Recommended charts
-st.subheader("4) Recommended charts")
 dims = [c for c, v in schema["fields"].items() if v["role"] == "dimension"]
 meas = [c for c, v in schema["fields"].items() if v["role"] == "measure"]
 dates = [c for c in df_clean.columns if "datetime" in str(df_clean[c].dtype)]
 
+st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+st.subheader("4) Recommended charts")
 recs = []
 if dates and meas:
     recs.append({"type": "line", "x": dates[0], "y": meas[0], "agg": "sum",
@@ -180,8 +290,10 @@ for i, spec in enumerate(recs, 1):
     st.markdown(f"**{i}. {spec.get('title','(untitled)')}** — {spec.get('why','')}")
     fig = build_chart(df_clean, spec)
     st.plotly_chart(fig, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 5) Build your own chart
+st.markdown("<div class='section-card'>", unsafe_allow_html=True)
 st.subheader("5) Build your own chart")
 chart_type = st.selectbox("Chart type", ["bar", "line", "scatter", "histogram", "box", "heatmap"])
 x = st.selectbox("X axis", dims + meas, index=0 if (dims or meas) else 0)
@@ -191,27 +303,30 @@ agg = st.selectbox("Aggregation (if measure)", ["sum", "mean", "count", "min", "
 
 if st.button("Render custom chart"):
     spec = {
-        "type": chart_type,
-        "x": x,
-        "y": y or None,
-        "color": color or None,
-        "agg": agg,
+        "type": chart_type, "x": x, "y": y or None,
+        "color": color or None, "agg": agg,
         "title": f"{chart_type.title()} — {x}" + (f" vs {y}" if y else "")
     }
     fig = build_chart(df_clean, spec)
     st.plotly_chart(fig, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 6) Export
+st.markdown("<div class='section-card'>", unsafe_allow_html=True)
 st.subheader("6) Export")
-st.download_button(
-    "⬇️ Download cleaned CSV",
-    df_clean.to_csv(index=False).encode("utf-8"),
-    file_name="cleaned_data.csv",
-    mime="text/csv",
-)
-st.download_button(
-    "⬇️ Download chart specs (JSON)",
-    json.dumps({"schema": schema, "recommendations": recs}, indent=2).encode("utf-8"),
-    file_name="chart_specs.json",
-    mime="application/json",
-)
+c1, c2 = st.columns(2)
+with c1:
+    st.download_button(
+        "⬇️ Download cleaned CSV",
+        df_clean.to_csv(index=False).encode("utf-8"),
+        file_name="cleaned_data.csv",
+        mime="text/csv",
+    )
+with c2:
+    st.download_button(
+        "⬇️ Download chart specs (JSON)",
+        json.dumps({"schema": schema, "recommendations": recs}, indent=2).encode("utf-8"),
+        file_name="chart_specs.json",
+        mime="application/json",
+    )
+st.markdown("</div>", unsafe_allow_html=True)
