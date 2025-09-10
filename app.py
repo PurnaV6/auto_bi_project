@@ -1,4 +1,5 @@
 # app.py
+# MIT Licensed © 2025 Purna Vemula (github.com/PurnaV6/auto_bi_project)
 import json
 import pandas as pd
 import streamlit as st
