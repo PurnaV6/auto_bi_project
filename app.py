@@ -119,26 +119,6 @@ h1, h2, h3, h4, h5 {{
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# -------------------- HELPERS --------------------
-def guess_role(s: pd.Series):
-    if pd.api.types.is_datetime64_any_dtype(s) or pd.api.types.is_bool_dtype(s):
-        return "dimension"
-    if pd.api.types.is_numeric_dtype(s):
-        return "measure" if s.nunique(dropna=True) > 15 else "dimension"
-    return "dimension" if s.nunique(dropna=True) <= max(50, len(s)//20) else "measure"
-
-def infer_schema(df: pd.DataFrame):
-    return {
-        "row_count": len(df),
-        "fields": {
-            c: {
-                "role": guess_role(df[c]),
-                "dtype": str(df[c].dtype),
-                "distinct": int(df[c].nunique(dropna=True)),
-            }
-            for c in df.columns
-        },
-    }
 
 def build_chart(df: pd.DataFrame, spec: dict):
     t = spec["type"]; x = spec.get("x"); y = spec.get("y")
