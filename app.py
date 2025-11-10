@@ -1,4 +1,5 @@
 # app.py (colorful)
+from modules.data_cleaner import clean_dataframe
 import json
 import pandas as pd
 import streamlit as st
@@ -137,31 +138,6 @@ def infer_schema(df: pd.DataFrame):
             for c in df.columns
         },
     }
-
-def clean_dataframe(df: pd.DataFrame):
-    X = df.copy()
-    for c in X.select_dtypes(include=["object", "string"]).columns:
-        X[c] = X[c].astype(str).str.strip()
-    for c in X.columns:
-        if X[c].dtype == "object":
-            try:
-                X[c] = pd.to_numeric(X[c]); continue
-            except Exception:
-                pass
-            try:
-                X[c] = pd.to_datetime(X[c], errors="raise", infer_datetime_format=True)
-            except Exception:
-                pass
-    before = len(X)
-    X = X.drop_duplicates()
-    dropped = before - len(X)
-    for c in X.select_dtypes(include=["float", "int", "Int64", "Float64"]).columns:
-        X[c] = X[c].fillna(X[c].median())
-    for c in X.select_dtypes(include=["object", "string", "category"]).columns:
-        X[c] = X[c].fillna("Missing")
-    report = {"actions": [f"drop_duplicates: {dropped} removed",
-                          "trim_strings", "fix_types", "simple_impute"]}
-    return X, report
 
 def build_chart(df: pd.DataFrame, spec: dict):
     t = spec["type"]; x = spec.get("x"); y = spec.get("y")
