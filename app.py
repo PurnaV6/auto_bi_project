@@ -6,6 +6,16 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
+@st.cache_data
+def get_schema(df: pd.DataFrame):
+    # Uses modules.schema_infer.infer_schema
+    return infer_schema(df)
+
+@st.cache_data
+def get_cleaned(df: pd.DataFrame):
+    # Uses modules.data_cleaner.clean_dataframe
+    return clean_dataframe(df)
+
 # -------------------- THEME SETTINGS (live controls) --------------------
 st.set_page_config(page_title="Auto-BI • Color Edition", layout="wide", page_icon="🎨")
 
@@ -205,14 +215,14 @@ st.markdown("</div>", unsafe_allow_html=True)
 # 2) Schema
 st.markdown("<div class='section-card'>", unsafe_allow_html=True)
 st.subheader("2) Schema & quick stats")
-schema = infer_schema(df)
+schema = get_schema(df)
 st.json(schema)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # 3) Cleaning
 st.markdown("<div class='section-card'>", unsafe_allow_html=True)
 st.subheader("3) Auto-clean")
-df_clean, report = clean_dataframe(df)
+df_clean, report = get_cleaned(df)
 st.success(f"Cleaned rows: {len(df_clean)} (from {len(df)})")
 with st.expander("Cleaning report"):
     st.json(report)
