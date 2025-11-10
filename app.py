@@ -1,5 +1,6 @@
 # app.py (colorful)
 from modules.data_cleaner import clean_dataframe
+from modules.schema_infer import infer_schema
 import json
 import pandas as pd
 import streamlit as st
